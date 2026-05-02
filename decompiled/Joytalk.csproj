@@ -1,0 +1,75 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <AssemblyName>Joytalk</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>True</UseWindowsForms>
+    <TargetFramework>net10.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>14.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace />
+  </PropertyGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <Reference Include="System.Drawing.Common" />
+    <Reference Include="Vortice.Direct2D1">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/Vortice.Direct2D1.dll</HintPath>
+    </Reference>
+    <Reference Include="CefSharp.WinForms">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/CefSharp.WinForms.dll</HintPath>
+    </Reference>
+    <Reference Include="CefSharp">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/CefSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Web.WebView2.Core">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/Microsoft.Web.WebView2.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Web.WebView2.WinForms">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/Microsoft.Web.WebView2.WinForms.dll</HintPath>
+    </Reference>
+    <Reference Include="NAudio.WinMM">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/NAudio.WinMM.dll</HintPath>
+    </Reference>
+    <Reference Include="NAudio.Core">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/NAudio.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Concentus">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/Concentus.dll</HintPath>
+    </Reference>
+    <Reference Include="NAudio.Wasapi">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/NAudio.Wasapi.dll</HintPath>
+    </Reference>
+    <Reference Include="Vortice.DXGI">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/Vortice.DXGI.dll</HintPath>
+    </Reference>
+    <Reference Include="Vortice.Direct3D11">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/Vortice.Direct3D11.dll</HintPath>
+    </Reference>
+    <Reference Include="Vortice.DirectX">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/Vortice.DirectX.dll</HintPath>
+    </Reference>
+    <Reference Include="PresentationCore" />
+    <Reference Include="Vortice.Mathematics">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/Vortice.Mathematics.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Windows.Forms.Primitives" />
+    <Reference Include="SharpGen.Runtime">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/SharpGen.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="NAudio.WinForms">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/NAudio.WinForms.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Windows.Extensions" />
+    <Reference Include="CefSharp.Core">
+      <HintPath>../Contents/SharedSupport/prefix/drive_c/Joytalk/CefSharp.Core.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

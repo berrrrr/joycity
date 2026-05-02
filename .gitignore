@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenv
+venv/
+.venv/
+env/
+
+# .NET build artifacts
+playground/bin/
+playground/obj/
+**/bin/Debug/
+**/bin/Release/
+**/obj/
+
+# Runtime capture logs
+captures/
+
+# Local secrets / env
+.env
+.env.local
+*.local

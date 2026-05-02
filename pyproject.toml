@@ -1,0 +1,10 @@
+[project]
+name = "joycity"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+proxy = "tools.proxy:main"
+item-tracker = "tools.item_tracker:main"
+decode-capture = "tools.decode_capture:main"
