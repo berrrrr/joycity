@@ -1,143 +1,143 @@
 #!/usr/bin/env python3
 """
-JoyTalk 서버 에뮬레이터
+JoyTalk 서버 에뮬레이터 (NDJSON, Phase 4 발견 반영)
 
-사용법:
-  python3 emulator.py [--host 0.0.0.0] [--port-game 7945] [--port-chat 7942]
+와이어 포맷:
+  각 패킷은 `{...JSON...}\\n` 한 줄. envelope/length-prefix 없음.
+  Phase 3 의 [u32 len][type byte] framing 은 macOS 빌드 잔재 — Windows 빌드 미사용.
+  자세한 내용은 docs/phase4_live_capture.md.
 
-게임 클라이언트가 이 서버로 연결하려면:
-  sudo bash -c "echo '127.0.0.1 jc.joy-june.com' >> /etc/hosts"
+사용법 (Windows):
+  관리자 PowerShell:
+    Add-Content C:\\Windows\\System32\\drivers\\etc\\hosts "127.0.0.1 jc.joy-june.com"
+  일반 셸:
+    py -3.11 server\\emulator.py
+    & "C:\\Users\\berrr\\AppData\\Local\\Joytalk\\Joytalk.exe"
+
+사용법 (macOS):
+    sudo bash -c "echo '127.0.0.1 jc.joy-june.com' >> /etc/hosts"
+    python3 server/emulator.py
 """
 
-import asyncio
 import argparse
-import json
-import struct
-import time
+import asyncio
+import io
 import itertools
+import json
+import sys
 from typing import Optional, Dict
 
-from protocol import read_frame, parse_frame, make_json_frame, make_keepalive_frame
 from handlers import dispatch, _remove_player
+
+# 진짜 jc.joy-june.com — CefSharp HTTPS/HTTP 요청을 통과시키기 위한 fallback
+REAL_UPSTREAM = "119.200.71.233"
 
 
 class Session:
     def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
-                 server: 'GameServer'):
+                 server: "GameServer"):
         self.reader = reader
         self.writer = writer
         self.server = server
         self.my_id: Optional[int] = None
-        self.userid: str = ''
+        self.userid: str = ""
         self._lock = asyncio.Lock()
 
     async def send_json(self, data: dict):
-        frame = make_json_frame(data)
+        line = json.dumps(data, ensure_ascii=False).encode("utf-8") + b"\n"
         async with self._lock:
-            self.writer.write(frame)
+            self.writer.write(line)
             await self.writer.drain()
 
     async def run(self):
-        peer = self.writer.get_extra_info('peername')
-        print(f'[session] 연결: {peer}')
+        peer = self.writer.get_extra_info("peername")
+        print(f"[session] 연결: {peer}")
         try:
             while True:
-                payload = await read_frame(self.reader)
-                if payload is None:
+                line = await self.reader.readline()
+                if not line:
                     break
-                parsed = parse_frame(payload)
-                await self._handle(parsed)
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    pkt = json.loads(line.decode("utf-8"))
+                except json.JSONDecodeError as e:
+                    print(f"  [parse-error] {e}: {line[:80]!r}")
+                    continue
+                await self._handle(pkt)
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
             pass
         finally:
             await _remove_player(self)
             self.server.sessions.discard(self)
             self.writer.close()
-            print(f'[session] 종료: {peer}  userid={self.userid!r}')
+            print(f"[session] 종료: {peer}  userid={self.userid!r}")
 
-    async def _handle(self, parsed: dict):
-        tb = parsed.get('type_byte')
-
-        if tb == 3:  # keepalive
-            frame = make_keepalive_frame()
-            async with self._lock:
-                self.writer.write(frame)
-                await self.writer.drain()
+    async def _handle(self, pkt: dict):
+        pkt_type = pkt.get("type", "")
+        if not pkt_type:
             return
-
-        if tb == 1:  # JSON
-            pkt = parsed.get('json', {})
-            pkt_type = pkt.get('type', '')
-            if pkt_type:
-                await dispatch(self, pkt_type, pkt)
-            return
-
-        if tb == 5:  # 바이너리 게임 패킷
-            name = parsed.get('name', '')
-            print(f'  [bin] seq={parsed.get("seq")}  name={name!r}  len={len(parsed.get("data", b""))}')
-            return
+        await dispatch(self, pkt_type, pkt)
 
 
 class GameServer:
     def __init__(self):
         self.sessions: set[Session] = set()
-        self.objects: Dict[int, object] = {}  # id → GameObject
-        self._id_counter = itertools.count(1000001)
+        self.objects: Dict[int, object] = {}     # object id → GameObject
+        self._id_counter = itertools.count(9168) # 캡처에서 본 첫 myId
 
     def next_id(self) -> int:
         return next(self._id_counter)
 
+    async def _send(self, session: "Session", line: bytes):
+        try:
+            async with session._lock:
+                session.writer.write(line)
+                await session.writer.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            self.sessions.discard(session)
+
     async def broadcast(self, data: dict):
-        frame = make_json_frame(data)
-        dead = set()
+        line = json.dumps(data, ensure_ascii=False).encode("utf-8") + b"\n"
         for s in list(self.sessions):
-            try:
-                async with s._lock:
-                    s.writer.write(frame)
-                    await s.writer.drain()
-            except (ConnectionResetError, BrokenPipeError):
-                dead.add(s)
-        self.sessions -= dead
+            await self._send(s, line)
 
     async def broadcast_except(self, exclude_id: int, data: dict):
-        frame = make_json_frame(data)
+        line = json.dumps(data, ensure_ascii=False).encode("utf-8") + b"\n"
         for s in list(self.sessions):
             if s.my_id != exclude_id:
-                try:
-                    async with s._lock:
-                        s.writer.write(frame)
-                        await s.writer.drain()
-                except (ConnectionResetError, BrokenPipeError):
-                    pass
+                await self._send(s, line)
 
     async def keepalive_loop(self):
-        frame = make_keepalive_frame()
+        """Phase 4 캡처상 서버는 명시적 keepalive 안 보냄. 향후 ping push 가 필요하면 여기서."""
         while True:
-            await asyncio.sleep(30)
-            for s in list(self.sessions):
-                try:
-                    async with s._lock:
-                        s.writer.write(frame)
-                        await s.writer.drain()
-                except Exception:
-                    pass
+            await asyncio.sleep(60)
 
-    async def handle_client(self, reader: asyncio.StreamReader,
-                            writer: asyncio.StreamWriter):
+    async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         session = Session(reader, writer, self)
         self.sessions.add(session)
         await session.run()
 
-    async def start(self, host: str, ports: list[int]):
+    async def start(self, host: str, ports: list[int],
+                    passthrough_ports: list[int] | None = None,
+                    upstream: str = REAL_UPSTREAM):
         servers = []
         for port in ports:
             srv = await asyncio.start_server(self.handle_client, host, port)
             servers.append(srv)
-            print(f'[emulator] 리스닝: {host}:{port}')
+            print(f"[emulator] 리스닝: {host}:{port}")
 
-        print(f'[emulator] 준비 완료 — 클라이언트 대기 중...')
-        print()
+        # 80/443 raw passthrough (CefSharp 인앱 브라우저 우회)
+        for pp in (passthrough_ports or []):
+            srv = await asyncio.start_server(
+                lambda r, w, p=pp: _handle_passthrough(r, w, upstream, p),
+                host, pp,
+            )
+            servers.append(srv)
+            print(f"[passthrough] {host}:{pp} → {upstream}:{pp}")
 
+        print("[emulator] 준비 완료 — 클라이언트 대기 중...\n")
         asyncio.create_task(self.keepalive_loop())
 
         async with asyncio.TaskGroup() as tg:
@@ -145,38 +145,65 @@ class GameServer:
                 tg.create_task(srv.serve_forever())
 
 
+async def _passthrough_relay(reader, writer):
+    try:
+        while True:
+            chunk = await reader.read(65536)
+            if not chunk:
+                break
+            writer.write(chunk)
+            await writer.drain()
+    except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
+        pass
+    finally:
+        writer.close()
+
+
+async def _handle_passthrough(client_reader, client_writer, upstream_host, port):
+    try:
+        srv_reader, srv_writer = await asyncio.open_connection(upstream_host, port)
+    except OSError as e:
+        print(f"[passthrough:{port}] 업스트림 실패: {e}")
+        client_writer.close()
+        return
+    await asyncio.gather(
+        _passthrough_relay(client_reader, srv_writer),
+        _passthrough_relay(srv_reader, client_writer),
+        return_exceptions=True,
+    )
+
+
 def main():
-    parser = argparse.ArgumentParser(description='JoyTalk 서버 에뮬레이터')
-    parser.add_argument('--host', default='0.0.0.0')
-    parser.add_argument('--port-game', type=int, default=7945)
-    parser.add_argument('--port-chat', type=int, default=7942)
-    parser.add_argument('--game-only', action='store_true')
-    parser.add_argument('--chat-only', action='store_true')
-    args = parser.parse_args()
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    p = argparse.ArgumentParser(description="JoyTalk 서버 에뮬레이터 (NDJSON)")
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--port", type=int, action="append",
+                   help="리스닝 포트 (반복 지정 가능, 기본: 7942 7945)")
+    p.add_argument("--no-passthrough", action="store_true",
+                   help="80/443 HTTP/HTTPS passthrough 안 띄움")
+    p.add_argument("--upstream", default=REAL_UPSTREAM,
+                   help=f"passthrough 업스트림 IP (기본 {REAL_UPSTREAM} = jc.joy-june.com)")
+    args = p.parse_args()
 
-    ports = []
-    if not args.game_only:
-        ports.append(args.port_chat)
-    if not args.chat_only:
-        ports.append(args.port_game)
+    ports = args.port or [7942, 7945]
+    pass_ports = [] if args.no_passthrough else [80, 443]
 
-    print('=' * 50)
-    print('  JoyTalk 서버 에뮬레이터')
-    print('=' * 50)
+    print("=" * 50)
+    print("  JoyTalk 서버 에뮬레이터 (NDJSON)")
+    print("=" * 50)
     print()
-    print('※ 클라이언트 리다이렉트:')
-    print('  sudo bash -c "echo \'127.0.0.1 jc.joy-june.com\' >> /etc/hosts"')
-    print()
-    print('※ 원복:')
-    print('  sudo sed -i \'\' \'/jc.joy-june.com/d\' /etc/hosts')
+    print("hosts 리다이렉트 (Windows 관리자 PowerShell):")
+    print('  Add-Content C:\\Windows\\System32\\drivers\\etc\\hosts "127.0.0.1 jc.joy-june.com"')
     print()
 
     server = GameServer()
     try:
-        asyncio.run(server.start(args.host, ports))
+        asyncio.run(server.start(args.host, ports,
+                                 passthrough_ports=pass_ports,
+                                 upstream=args.upstream))
     except KeyboardInterrupt:
-        print('\n[emulator] 종료')
+        print("\n[emulator] 종료")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

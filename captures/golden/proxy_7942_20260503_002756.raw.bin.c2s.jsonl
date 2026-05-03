@@ -1,0 +1,23 @@
+{"type": "login", "version": "2.88", "userid": "tester", "userpw": "***", "timestamp": "1"}
+{"type": "move", "TY": "92", "TX": "90", "OX": "89", "OY": "92", "timestamp": "2"}
+{"type": "move", "TY": "93", "TX": "87", "OX": "89", "OY": "92", "timestamp": "3"}
+{"type": "myState", "LocationX": "90", "LocationY": "92", "motion": "6", "timestamp": "4"}
+{"type": "move", "TY": "93", "TX": "88", "OX": "90", "OY": "93", "timestamp": "5"}
+{"type": "move", "TY": "96", "TX": "88", "OX": "89", "OY": "93", "timestamp": "6"}
+{"type": "myState", "LocationX": "88", "LocationY": "93", "motion": "4", "timestamp": "7"}
+{"type": "move", "TY": "98", "TX": "89", "OX": "88", "OY": "94", "timestamp": "8"}
+{"type": "move", "TY": "91", "TX": "87", "OX": "88", "OY": "96", "timestamp": "9"}
+{"type": "move", "TY": "91", "TX": "88", "OX": "88", "OY": "95", "timestamp": "10"}
+{"type": "move", "TY": "90", "TX": "88", "OX": "88", "OY": "94", "timestamp": "11"}
+{"type": "myState", "LocationX": "88", "LocationY": "90", "motion": "8", "timestamp": "12"}
+{"type": "chat", "text": "ee", "timestamp": "13"}
+{"type": "chat", "text": "ㄷㄷ", "timestamp": "14"}
+{"type": "move", "TY": "92", "TX": "84", "OX": "88", "OY": "90", "timestamp": "15"}
+{"type": "move", "TY": "94", "TX": "84", "OX": "88", "OY": "92", "timestamp": "16"}
+{"type": "move", "TY": "94", "TX": "85", "OX": "87", "OY": "92", "timestamp": "17"}
+{"type": "myState", "LocationX": "85", "LocationY": "94", "motion": "4", "timestamp": "18"}
+{"type": "map", "mapId": "01007", "timestamp": "19"}
+{"type": "move", "TY": "85", "TX": "54", "OX": "55", "OY": "80", "timestamp": "20"}
+{"type": "move", "TY": "85", "TX": "54", "OX": "54", "OY": "82", "timestamp": "21"}
+{"type": "myState", "LocationX": "54", "LocationY": "85", "motion": "2", "timestamp": "22"}
+{"type": "exit", "timestamp": "23"}
