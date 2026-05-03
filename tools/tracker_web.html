@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8"><title>JoyTalk Tracker</title>
+<style>
+  * { box-sizing: border-box; }
+  body { background: #1a1d21; color: #c8d0d8; font: 13px/1.4 'Consolas','Malgun Gothic',monospace; margin: 0; padding: 12px; }
+  h1 { font-size: 14px; margin: 0 0 8px; color: #6ea8fe; letter-spacing: 1px; }
+  .grid { display: grid; grid-template-columns: 320px 1fr; gap: 12px; height: calc(100vh - 40px); }
+  .col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .card { background: #23272d; border: 1px solid #2f3540; border-radius: 4px; padding: 8px 10px; }
+  .card h2 { font-size: 11px; margin: 0 0 6px; color: #8a94a6; letter-spacing: 1px; text-transform: uppercase; }
+  .row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+  .row label { width: 88px; color: #8a94a6; font-size: 11px; }
+  .help { color: #8a94a6; font-size: 10.5px; line-height: 1.45; margin: 4px 0 6px; }
+  .help table { border-collapse: collapse; margin-top: 3px; }
+  .help td { padding: 1px 6px 1px 0; vertical-align: top; }
+  .help code { background: #14171b; color: #fdcb6e; padding: 0 4px; border-radius: 2px; font-weight: bold; }
+  .help .ex { color: #6c7280; }
+  details summary { cursor: pointer; color: #6ea8fe; font-size: 10.5px; user-select: none; outline: none; }
+  details[open] summary { margin-bottom: 4px; }
+  .row input[type=text], .row input[type=number] { flex: 1; background: #14171b; color: #c8d0d8; border: 1px solid #2f3540; padding: 3px 6px; font: inherit; border-radius: 3px; }
+  .row input[type=number] { width: 70px; flex: 0 0 70px; }
+  button { background: #2c5282; color: #fff; border: 0; padding: 4px 10px; border-radius: 3px; cursor: pointer; font: inherit; }
+  button:hover { background: #3a6ba5; }
+  button.warn { background: #8b3030; }
+  .toggle { display: flex; align-items: center; gap: 4px; margin-right: 8px; }
+  .toggle input { margin: 0; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; }
+  .stats span:nth-child(odd) { color: #8a94a6; }
+  .stats span:nth-child(even) { color: #c8d0d8; font-weight: bold; }
+  .items, .log { overflow-y: auto; font-size: 11px; flex: 1; min-height: 0; }
+  .items table { width: 100%; border-collapse: collapse; }
+  .items th, .items td { text-align: left; padding: 2px 6px; border-bottom: 1px solid #2a2e35; }
+  .items th { color: #8a94a6; font-weight: normal; position: sticky; top: 0; background: #23272d; }
+  .items tr.target { background: rgba(110, 168, 254, 0.15); }
+  .items td.dist-near { color: #5fc46e; font-weight: bold; }
+  .log .line { padding: 1px 6px; border-bottom: 1px solid #2a2e35; white-space: pre-wrap; word-break: break-all; }
+  .log .ts { color: #5d6678; margin-right: 8px; }
+  .log .info { color: #c8d0d8; }
+  .log .success { color: #5fc46e; font-weight: bold; }
+  .log .warn { color: #fdcb6e; font-weight: bold; }
+  .log .err { color: #ff7675; font-weight: bold; }
+  .log .dim { color: #6c7280; }
+  .conn-on { color: #5fc46e; }
+  .conn-off { color: #ff7675; }
+  hr { border: 0; border-top: 1px solid #2f3540; margin: 6px 0; }
+</style></head>
+<body>
+<h1>JoyTalk Item Tracker</h1>
+<div class="grid">
+  <div class="col">
+    <div class="card">
+      <h2>Status</h2>
+      <div class="stats" id="stats">
+        <span>Connection</span><span id="s_conn" class="conn-off">…</span>
+        <span>My ID</span><span id="s_myid">-</span>
+        <span>Position</span><span id="s_pos">-</span>
+        <span>Map</span><span id="s_map">-</span>
+        <span>Items tracked</span><span id="s_items">0</span>
+        <span>Walker target</span><span id="s_target">-</span>
+        <span>Path queued</span><span id="s_path">0</span>
+        <span>Walkable cells</span><span id="s_walk">0</span>
+        <span>Blocked cells</span><span id="s_block">0</span>
+      </div>
+    </div>
+    <div class="card" style="flex:0 0 auto;">
+      <h2>Map (학습된 지형)</h2>
+      <canvas id="mapcv" width="300" height="200" style="background:#14171b; border:1px solid #2f3540; border-radius:3px; display:block; width:100%;"></canvas>
+      <div style="font-size:10px; color:#6c7280; margin-top:4px;">
+        <span style="color:#5fc46e;">■</span> walkable
+        <span style="color:#ff7675; margin-left:8px;">■</span> blocked
+        <span style="color:#fdcb6e; margin-left:8px;">●</span> 아이템
+        <span style="color:#6ea8fe; margin-left:8px;">★</span> 본인
+      </div>
+    </div>
+    <div class="card">
+      <h2>Filter</h2>
+      <div class="row"><label>name</label><input id="i_filter" type="text" placeholder="꽃,당근"></div>
+      <div class="row"><label>types</label><input id="i_types" type="text" placeholder="hi,i"></div>
+      <details class="help"><summary>ⓘ type 코드 보기</summary>
+        <table>
+          <tr><td><code>c</code></td><td>캐릭터</td><td class="ex">다른 유저</td></tr>
+          <tr><td><code>hi</code></td><td>채집형</td><td class="ex">씨앗, 버섯, 열매, 땅의요정석</td></tr>
+          <tr><td><code>i</code></td><td>장식형</td><td class="ex">빨강꽃, 노랑꽃, 파랑꽃</td></tr>
+          <tr><td><code>o</code></td><td>들고있는 것</td><td class="ex">줍기 불가</td></tr>
+          <tr><td><code>s</code></td><td>직업 표지</td><td class="ex">"OO의 직업"</td></tr>
+          <tr><td><code>e</code></td><td>이벤트 NPC</td><td class="ex">캐리</td></tr>
+        </table>
+        기본 <code>hi,i</code> = 줍기 가능한 모든 종류. <code>i</code> 만 = 꽃만 추적.
+        <br>name 필터와 AND 조건.
+      </details>
+      <div class="row" style="margin-top:6px;">
+        <label class="toggle"><input id="i_pickup" type="checkbox"> Pickup</label>
+        <label class="toggle"><input id="i_walk" type="checkbox"> Walk</label>
+        <label class="toggle"><input id="i_stealth" type="checkbox"> Stealth</label>
+      </div>
+      <div class="row"><label>max-dist</label><input id="i_maxdist" type="number" min="1" step="1"></div>
+      <div class="row"><label>cooldown</label><input id="i_cooldown" type="number" min="0" step="0.1"></div>
+      <div class="row"><label>walk-int</label><input id="i_winterval" type="number" min="0.05" step="0.01"></div>
+      <div class="row"><label>step-size</label><input id="i_step" type="number" min="1" step="1"></div>
+      <div class="row" style="margin-top:6px; gap:8px;">
+        <button id="b_apply">Apply</button>
+        <button id="b_clear" class="warn">Clear blacklist</button>
+      </div>
+    </div>
+    <div class="card" style="flex:1; min-height:0; display:flex; flex-direction:column;">
+      <h2>Items on map (matching)</h2>
+      <div class="items"><table id="t_items">
+        <thead><tr><th>name</th><th>#id</th><th>(x,y)</th><th>dist</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card" style="flex:1; min-height:0; display:flex; flex-direction:column;">
+      <h2>Log <span style="float:right; font-weight:normal;"><label class="toggle"><input id="i_autoscroll" type="checkbox" checked> auto-scroll</label></span></h2>
+      <div class="log" id="logbox"></div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const logbox = $('logbox');
+const tbody = document.querySelector('#t_items tbody');
+
+function addLog(e) {
+  const div = document.createElement('div');
+  div.className = 'line';
+  div.innerHTML = `<span class="ts">${e.ts}</span><span class="${e.level}">${escapeHtml(e.msg)}</span>`;
+  logbox.appendChild(div);
+  while (logbox.childElementCount > 500) logbox.removeChild(logbox.firstChild);
+  if ($('i_autoscroll').checked) logbox.scrollTop = logbox.scrollHeight;
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+let lastState = null;
+let lastMapCells = null;
+let lastMapId = null;
+
+function renderState(s) {
+  lastState = s;
+  $('s_conn').textContent = s.connected ? 'connected' : 'idle';
+  $('s_conn').className = s.connected ? 'conn-on' : 'conn-off';
+  $('s_myid').textContent = s.my_id ?? '-';
+  $('s_pos').textContent = s.my_id ? `(${s.my_x},${s.my_y}) srv=(${s.server_x},${s.server_y})` : '-';
+  $('s_map').textContent = s.map_id || '-';
+  $('s_items').textContent = s.items.length;
+  $('s_target').textContent = s.walk_target ? `${s.walk_target[1]} #${s.walk_target[0]} (${s.walk_target[2]},${s.walk_target[3]})` : '-';
+  $('s_path').textContent = s.path_remaining || 0;
+  $('s_walk').textContent = s.walkable_cells || 0;
+  $('s_block').textContent = s.blocked_cells || 0;
+  // items table
+  tbody.innerHTML = '';
+  s.items.sort((a,b) => a.dist - b.dist);
+  for (const it of s.items.slice(0, 30)) {
+    const tr = document.createElement('tr');
+    if (s.walk_target && s.walk_target[0] === it.oid) tr.className = 'target';
+    const distClass = it.dist <= s.max_dist ? 'dist-near' : '';
+    tr.innerHTML = `<td>${escapeHtml(it.name)}</td><td>#${it.oid}</td><td>(${it.x},${it.y})</td><td class="${distClass}">${it.dist.toFixed(0)}</td>`;
+    tbody.appendChild(tr);
+  }
+  if (s.map_id && s.map_id !== lastMapId) {
+    lastMapId = s.map_id;
+    fetchCells();
+  }
+  drawMap();
+}
+
+async function fetchCells() {
+  try {
+    const r = await fetch('/map.json');
+    lastMapCells = await r.json();
+    drawMap();
+  } catch(e) {}
+}
+setInterval(fetchCells, 4000);
+
+function drawMap() {
+  const cv = $('mapcv');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (!lastState || !lastMapCells) return;
+  const xs = [], ys = [];
+  for (const c of (lastMapCells.walkable || [])) { xs.push(c[0]); ys.push(c[1]); }
+  for (const c of (lastMapCells.blocked || []))  { xs.push(c[0]); ys.push(c[1]); }
+  for (const it of lastState.items) { xs.push(it.x); ys.push(it.y); }
+  if (lastState.my_id) { xs.push(lastState.server_x); ys.push(lastState.server_y); }
+  if (xs.length === 0) return;
+  const minX = Math.min(...xs) - 4, maxX = Math.max(...xs) + 4;
+  const minY = Math.min(...ys) - 4, maxY = Math.max(...ys) + 4;
+  const sx = cv.width / (maxX - minX || 1);
+  const sy = cv.height / (maxY - minY || 1);
+  const sc = Math.min(sx, sy);
+  const ox = (cv.width - (maxX - minX) * sc) / 2 - minX * sc;
+  const oy = (cv.height - (maxY - minY) * sc) / 2 - minY * sc;
+  const cs = Math.max(2, sc * 2);
+  ctx.fillStyle = '#1f4d2a';
+  for (const [x, y] of (lastMapCells.walkable || [])) {
+    ctx.fillRect(x * sc + ox - cs/2, y * sc + oy - cs/2, cs, cs);
+  }
+  ctx.fillStyle = '#7a2828';
+  for (const [x, y] of (lastMapCells.blocked || [])) {
+    ctx.fillRect(x * sc + ox - cs/2, y * sc + oy - cs/2, cs, cs);
+  }
+  for (const it of lastState.items) {
+    ctx.fillStyle = '#fdcb6e';
+    ctx.beginPath(); ctx.arc(it.x * sc + ox, it.y * sc + oy, 3, 0, Math.PI*2); ctx.fill();
+  }
+  if (lastState.walk_target) {
+    const t = lastState.walk_target;
+    ctx.strokeStyle = '#6ea8fe'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(t[2] * sc + ox, t[3] * sc + oy, 6, 0, Math.PI*2); ctx.stroke();
+  }
+  if (lastState.my_id) {
+    ctx.fillStyle = '#6ea8fe';
+    const x = lastState.server_x * sc + ox, y = lastState.server_y * sc + oy;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 5); ctx.lineTo(x + 4, y + 4); ctx.lineTo(x - 4, y + 4); ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function loadConfig(c) {
+  $('i_filter').value = c.filter || '';
+  $('i_types').value = c.types || '';
+  $('i_pickup').checked = !!c.pickup;
+  $('i_walk').checked = !!c.auto_walk;
+  $('i_stealth').checked = !!c.stealth;
+  $('i_maxdist').value = c.max_dist;
+  $('i_cooldown').value = c.cooldown;
+  $('i_winterval').value = c.walk_interval;
+  $('i_step').value = c.step_size;
+}
+
+$('b_apply').onclick = async () => {
+  const body = {
+    filter: $('i_filter').value,
+    types: $('i_types').value,
+    pickup: $('i_pickup').checked,
+    auto_walk: $('i_walk').checked,
+    stealth: $('i_stealth').checked,
+    max_dist: parseFloat($('i_maxdist').value),
+    cooldown: parseFloat($('i_cooldown').value),
+    walk_interval: parseFloat($('i_winterval').value),
+    step_size: parseInt($('i_step').value),
+  };
+  const r = await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  loadConfig(j);
+};
+$('b_clear').onclick = async () => {
+  await fetch('/api/clear-blacklist', {method:'POST'});
+};
+
+const es = new EventSource('/events');
+es.onmessage = (ev) => {
+  const e = JSON.parse(ev.data);
+  if (e.kind === 'log') addLog(e);
+  else if (e.kind === 'state') renderState(e);
+  else if (e.kind === 'config') loadConfig(e);
+};
+es.onerror = () => { $('s_conn').textContent = 'sse error'; $('s_conn').className = 'conn-off'; };
+</script>
+</body></html>
