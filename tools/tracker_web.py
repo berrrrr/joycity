@@ -21,7 +21,7 @@ import pathlib
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from item_tracker import Tracker
+    from item_tracker.tracker import Tracker
 
 HTML_PATH = pathlib.Path(__file__).resolve().parent / "tracker_web.html"
 
@@ -38,6 +38,7 @@ def _config_dict(args) -> dict:
         "types": args.types or "",
         "pickup": bool(args.pickup),
         "auto_walk": bool(args.auto_walk),
+        "wander": bool(getattr(args, "wander", False)),
         "stealth": bool(args.stealth),
         "max_dist": args.max_dist,
         "cooldown": args.cooldown,
@@ -142,7 +143,7 @@ async def _handle(reader, writer):
             if "types" in cfg:
                 t.args.types = cfg["types"] or ""
                 t.types = set(s for s in t.args.types.split(",") if s)
-            for k in ("pickup", "auto_walk", "stealth"):
+            for k in ("pickup", "auto_walk", "wander", "stealth"):
                 if k in cfg:
                     setattr(t.args, k, bool(cfg[k]))
             for k in ("max_dist", "cooldown", "walk_interval"):
@@ -164,6 +165,28 @@ async def _handle(reader, writer):
             _TRACKER.blacklist.clear()
             if _LOG_FN:
                 _LOG_FN(f"[config] blacklist cleared ({n} entries)", "info")
+            await _write_response(writer, 200, b'{"ok":true}')
+            return
+        if path == "/api/shutdown" and method == "POST":
+            if _LOG_FN:
+                _LOG_FN("[shutdown] 웹에서 종료 요청 — 프로세스 종료", "warn")
+            await _write_response(writer, 200, b'{"ok":true,"msg":"shutting down"}')
+            # 누적 학습 저장 후 즉시 종료
+            try:
+                for cmap in _TRACKER.cmaps.values():
+                    cmap.save_persist()
+            except Exception:
+                pass
+            import os
+            os._exit(0)
+        if path == "/api/save-collision" and method == "POST":
+            saved = 0
+            for cmap in _TRACKER.cmaps.values():
+                cmap._dirty = True
+                cmap.save_persist()
+                saved += 1
+            if _LOG_FN:
+                _LOG_FN(f"[shutdown] collision 학습 강제 저장 ({saved} 맵)", "info")
             await _write_response(writer, 200, b'{"ok":true}')
             return
         if path == "/events":

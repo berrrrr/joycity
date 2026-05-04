@@ -1,0 +1,13 @@
+# 꽃 자동 채집 — auto-walk + pickup + stealth + 웹 UI
+# 가까운 꽃부터 자동으로 걸어가서 줍고, 못 가는 거는 잠시 블랙리스트.
+
+filter = "요정석,씨앗,버섯,열매,꽃"
+pickup = true
+auto_walk = true
+stealth = true
+web = true
+beep = false
+max_dist = 30.0
+max_target_dist = 120.0
+walk_interval = 0.18
+blacklist_secs = 20.0

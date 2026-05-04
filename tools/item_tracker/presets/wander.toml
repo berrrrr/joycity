@@ -1,0 +1,12 @@
+# 어슬렁 모드 — 학습된 영역 안에서 idle 일 때 랜덤 patrol
+# 채집/줍기 모두 켜고 + 한 자리에 가만히 안 있게.
+
+filter = "요정석,씨앗,버섯,열매,꽃,인삼,별,달팽이"
+pickup = true
+auto_walk = true
+wander = true
+stealth = true
+web = true
+wander_idle = 2.0
+wander_steps_min = 4
+wander_steps_max = 12

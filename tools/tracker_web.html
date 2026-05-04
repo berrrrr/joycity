@@ -23,6 +23,8 @@
   button { background: #2c5282; color: #fff; border: 0; padding: 4px 10px; border-radius: 3px; cursor: pointer; font: inherit; }
   button:hover { background: #3a6ba5; }
   button.warn { background: #8b3030; }
+  button.qf { background: #2a3540; color: #a8b0bc; padding: 2px 8px; font-size: 10.5px; border: 1px solid #2f3540; }
+  button.qf:hover { background: #3a4756; color: #fff; }
   .toggle { display: flex; align-items: center; gap: 4px; margin-right: 8px; }
   .toggle input { margin: 0; }
   .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; }
@@ -75,13 +77,40 @@
     </div>
     <div class="card">
       <h2>Filter</h2>
-      <div class="row"><label>name</label><input id="i_filter" type="text" placeholder="꽃,당근"></div>
+      <div class="row"><label>name</label><input id="i_filter" type="text" placeholder="요정석,씨앗,버섯,열매,꽃"></div>
+      <div class="quick" style="display:flex; gap:4px; flex-wrap:wrap; margin: 2px 0 6px;">
+        <button class="qf" data-fill="요정석,씨앗,버섯,열매,꽃">채집+꽃</button>
+        <button class="qf" data-fill="요정석,씨앗,버섯,열매">채집만</button>
+        <button class="qf" data-fill="꽃">꽃만</button>
+        <button class="qf" data-fill="요정석,씨앗,버섯,열매,꽃,인삼,별,달팽이">전부</button>
+        <button class="qf" data-fill="">지우기</button>
+      </div>
       <div class="row"><label>types</label><input id="i_types" type="text" placeholder="hi,i"></div>
+      <details class="help"><summary>ⓘ 알려진 아이템 + 필터 팁</summary>
+        <div style="margin-top:4px;">
+          <b style="color:#5fc46e;">채집형 (type=hi)</b> — 진짜 줍는 거<br>
+          <code>땅의요정석</code> <code>씨앗</code> <code>버섯</code> <code>열매</code>
+        </div>
+        <div style="margin-top:4px;">
+          <b style="color:#fdcb6e;">꽃 (type=i)</b><br>
+          <code>빨강꽃</code> <code>파랑꽃</code> <code>노랑꽃</code> <code>인삼꽃</code> <code>인삼</code>
+        </div>
+        <div style="margin-top:4px;">
+          <b style="color:#6ea8fe;">희귀/이벤트</b><br>
+          <code>바람의요정석</code> <code>별</code> <code>달팽이</code>
+        </div>
+        <div style="margin-top:6px; color:#a8b0bc;">
+          💡 부분일치라 짧게 쓰면 됨:<br>
+          &nbsp;&nbsp;<code>꽃</code> → 빨강꽃·파랑꽃·노랑꽃·인삼꽃 다 잡힘<br>
+          &nbsp;&nbsp;<code>요정석</code> → 땅의요정석 + 바람의요정석<br>
+          ⚠️ <code>i</code> 타입엔 노점 가격(<span class="ex">2,500,000 등</span>), 쓰레기통, 편지함도 섞여있음 — name 필터 꼭 쓰기
+        </div>
+      </details>
       <details class="help"><summary>ⓘ type 코드 보기</summary>
         <table>
           <tr><td><code>c</code></td><td>캐릭터</td><td class="ex">다른 유저</td></tr>
           <tr><td><code>hi</code></td><td>채집형</td><td class="ex">씨앗, 버섯, 열매, 땅의요정석</td></tr>
-          <tr><td><code>i</code></td><td>장식형</td><td class="ex">빨강꽃, 노랑꽃, 파랑꽃</td></tr>
+          <tr><td><code>i</code></td><td>장식형</td><td class="ex">꽃, 노점 표지</td></tr>
           <tr><td><code>o</code></td><td>들고있는 것</td><td class="ex">줍기 불가</td></tr>
           <tr><td><code>s</code></td><td>직업 표지</td><td class="ex">"OO의 직업"</td></tr>
           <tr><td><code>e</code></td><td>이벤트 NPC</td><td class="ex">캐리</td></tr>
@@ -89,18 +118,21 @@
         기본 <code>hi,i</code> = 줍기 가능한 모든 종류. <code>i</code> 만 = 꽃만 추적.
         <br>name 필터와 AND 조건.
       </details>
-      <div class="row" style="margin-top:6px;">
+      <div class="row" style="margin-top:6px; flex-wrap:wrap;">
         <label class="toggle"><input id="i_pickup" type="checkbox"> Pickup</label>
         <label class="toggle"><input id="i_walk" type="checkbox"> Walk</label>
+        <label class="toggle"><input id="i_wander" type="checkbox"> Wander</label>
         <label class="toggle"><input id="i_stealth" type="checkbox"> Stealth</label>
       </div>
       <div class="row"><label>max-dist</label><input id="i_maxdist" type="number" min="1" step="1"></div>
       <div class="row"><label>cooldown</label><input id="i_cooldown" type="number" min="0" step="0.1"></div>
       <div class="row"><label>walk-int</label><input id="i_winterval" type="number" min="0.05" step="0.01"></div>
       <div class="row"><label>step-size</label><input id="i_step" type="number" min="1" step="1"></div>
-      <div class="row" style="margin-top:6px; gap:8px;">
+      <div class="row" style="margin-top:6px; gap:8px; flex-wrap:wrap;">
         <button id="b_apply">Apply</button>
         <button id="b_clear" class="warn">Clear blacklist</button>
+        <button id="b_save">Save collision</button>
+        <button id="b_stop" class="warn" style="background:#a02020; margin-left:auto;">⏻ Stop tracker</button>
       </div>
     </div>
     <div class="card" style="flex:1; min-height:0; display:flex; flex-direction:column;">
@@ -226,6 +258,7 @@ function loadConfig(c) {
   $('i_types').value = c.types || '';
   $('i_pickup').checked = !!c.pickup;
   $('i_walk').checked = !!c.auto_walk;
+  $('i_wander').checked = !!c.wander;
   $('i_stealth').checked = !!c.stealth;
   $('i_maxdist').value = c.max_dist;
   $('i_cooldown').value = c.cooldown;
@@ -233,12 +266,20 @@ function loadConfig(c) {
   $('i_step').value = c.step_size;
 }
 
+document.querySelectorAll('button.qf').forEach(btn => {
+  btn.onclick = () => {
+    $('i_filter').value = btn.dataset.fill || '';
+    $('i_filter').focus();
+  };
+});
+
 $('b_apply').onclick = async () => {
   const body = {
     filter: $('i_filter').value,
     types: $('i_types').value,
     pickup: $('i_pickup').checked,
     auto_walk: $('i_walk').checked,
+    wander: $('i_wander').checked,
     stealth: $('i_stealth').checked,
     max_dist: parseFloat($('i_maxdist').value),
     cooldown: parseFloat($('i_cooldown').value),
@@ -251,6 +292,19 @@ $('b_apply').onclick = async () => {
 };
 $('b_clear').onclick = async () => {
   await fetch('/api/clear-blacklist', {method:'POST'});
+};
+$('b_save').onclick = async () => {
+  await fetch('/api/save-collision', {method:'POST'});
+};
+$('b_stop').onclick = async () => {
+  if (!confirm('정말 tracker 를 종료할까요?\n(학습된 collision 데이터는 자동 저장됩니다)')) return;
+  try {
+    await fetch('/api/shutdown', {method:'POST'});
+  } catch(e) {}
+  $('s_conn').textContent = 'stopped';
+  $('s_conn').className = 'conn-off';
+  document.body.style.opacity = '0.4';
+  alert('tracker 종료됨. 다시 띄우려면 PowerShell 에서 py 명령 실행.');
 };
 
 const es = new EventSource('/events');

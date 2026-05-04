@@ -1,0 +1,9 @@
+# 기본 프리셋 — 웹 UI 켜고 알림만, 자동 줍기/이동 OFF
+# 사용:
+#   python -m item_tracker --preset default
+#   (또는 start.bat 더블클릭)
+
+filter = ""        # 비우면 알림 안 뜸. 웹 UI 에서 런타임 변경 가능
+web = true
+beep = true
+stealth = true
