@@ -72,6 +72,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--reaction-min", type=float, default=0.3, help="stealth: 최소 반응 지연")
     p.add_argument("--reaction-max", type=float, default=1.2, help="stealth: 최대 반응 지연")
     p.add_argument("--proximity-interval", type=float, default=0.5, help="근접 스캔 주기 초")
+    p.add_argument("--auto-smile", action="store_true",
+                   help="돼지/응가 NPC 도달 시 자동 표정 짓기 (motion 패킷 발사). 풀자동 사냥용.")
+    p.add_argument("--smile-motion", type=int, default=62,
+                   help="표정 motion 코드 (기본 62=웃음, 캡처 검증)")
+    p.add_argument("--smile-drop-window", type=float, default=12.0,
+                   help="표정 발사 후 N초간 모든 type=i 자동 픽업 (drop 종류 다양 — 기본 12s)")
     p.add_argument("--webhook", default="", help="Discord webhook URL (옵션)")
     p.add_argument("--no-passthrough", action="store_true", help="80/443 raw passthrough 끔")
     p.add_argument("--log-dir", default="captures", help="raw NDJSON 로그 저장 디렉터리")
@@ -183,7 +189,10 @@ async def run(args):
 
 def main():
     # UTF-8 stdout (Windows cmd/PowerShell 한글 출력)
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    # line_buffering=True — PowerShell `&` 호출 시 파이프로 인식되어 블록 버퍼링 되는 거 회피
+    sys.stdout = io.TextIOWrapper(
+        sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True
+    )
 
     parser = build_parser()
     args = parser.parse_args()

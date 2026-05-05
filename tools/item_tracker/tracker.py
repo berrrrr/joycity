@@ -34,8 +34,18 @@ class Tracker:
         self.move_ts: int = 0  # itemGet timestamp 동기화용
         # obj_id -> (name, x, y)
         self.items: dict[int, tuple[str, int, int]] = {}
+        # obj_id -> obj type code ('c', 'hi', 'i', 'o', 'em', ...)
+        # 'o' = NPC 가 누군가에게 변신/탑승 됐음 → walker 타겟 제외
+        self.item_types: dict[int, str] = {}
+        # 이미 표정 짓기 시도한 NPC oid (재시도 방지). 맵 전환 시 reset.
+        self.smiled_ids: set[int] = set()
+        # 표정 직후 drop window — 이 timestamp 이전엔 어떤 type=i 든 자동 픽업
+        self.smile_drop_until: float = 0.0
         self.client_writer: Optional[asyncio.StreamWriter] = None
-        self.last_pickup_id: Optional[int] = None
+        # 이미 itemGet 발사한 oid 들 — 서버가 remove 패킷 안 보낼 수도 있어서
+        # 우리 쪽에서 명시적으로 추적해야 stale 아이템 다시 타겟하는 거 방지.
+        # 맵 전환 시 clear (oid 가 다음 맵에서 재사용될 수 있음).
+        self.picked_ids: set[int] = set()
         self.last_pickup_time: float = 0.0  # 쓰로틀
         # walker 상태: (oid, name, target_x, target_y) — None 이면 walking 중지
         self.walk_target: Optional[tuple[int, str, int, int]] = None
@@ -88,6 +98,41 @@ class Tracker:
         dist = (dx * dx + dy * dy) ** 0.5
         return f"({x},{y}) dist={dist:.0f}"
 
+    # 표정 짓기 가능한 NPC 판별 — 캡처 검증됨
+    # ○○돼지: 살색/황금/산타 (idx 3000~3002)
+    # ○○팝: 쵸코팝/차차팝/골드팝 (강아지 변신 NPC, idx 2118~2121)
+    # ○○차차: 둥둥차차/빨간멍든차차/차차둥둥 (차차 시리즈)
+    # 제외: 오팝 (사용자 요청), 팝콘 (em 상점), 팝마트 (상점 NPC), 팝피아초청장 (item)
+    _ANIMAL_FALSE_POSITIVES = {"오팝", "팝콘", "팝마트", "팝피아초청장"}
+
+    def is_animal(self, name: str) -> bool:
+        """표정 짓기 발사 대상인지 판별."""
+        if any(kw in name for kw in ("돼지", "응가")):
+            return True
+        if name in self._ANIMAL_FALSE_POSITIVES:
+            return False
+        if name.endswith("팝") or "차차" in name:
+            return True
+        return False
+
+    def should_target(self, oid: int, name: str) -> bool:
+        """walker/pickup 대상인지 판별.
+
+        - filter 매칭 → 무조건 OK (기존 동작)
+        - 표정 직후 drop window 안 + type=i → 이름 무관하게 OK
+          (드랍 아이템 이름이 다양하고 매번 변할 수 있어서 — 차차팝이 골드응가도
+          뱉을 수 있다는 사용자 보고 기반)
+        """
+        if self.matches(name):
+            return True
+        if time.time() < self.smile_drop_until and self.item_types.get(oid) == "i":
+            return True
+        return False
+
+    def is_taken(self, oid: int) -> bool:
+        """돼지/응가가 이미 누군가에게 변신/탑승 됨 (type=o). 타겟 제외해야 함."""
+        return self.item_types.get(oid) == "o"
+
     async def on_packet_s2c(self, pkt: dict):
         """서버 → 클라 패킷 처리."""
         t = pkt.get("type")
@@ -103,15 +148,23 @@ class Tracker:
 
         elif t in ("obj", "objc"):
             for k, v in (pkt.get("gameObjects") or {}).items():
-                if v.get("type") not in self.types:
-                    continue
+                obj_type = v.get("type")
                 try:
                     oid = int(v.get("no", k))
+                except (ValueError, TypeError):
+                    continue
+                # 이미 추적중인 oid 의 type 변환은 항상 받음 (c→o 가 핵심 신호)
+                if oid in self.item_types:
+                    self.item_types[oid] = obj_type
+                if obj_type not in self.types:
+                    continue
+                try:
                     name = v.get("name", "?")
                     x = int(v.get("OX", 0))
                     y = int(v.get("OY", 0))
                     prev = self.items.get(oid)
                     self.items[oid] = (name, x, y)
+                    self.item_types[oid] = obj_type
                     is_new = prev is None
                     if t == "objc" or is_new:
                         await self.notify_spawn(oid, name, x, y, batch=(t == "obj"))
@@ -141,6 +194,7 @@ class Tracker:
                     name, x, y = self.items.pop(oid)
                     if self.matches(name):
                         log(f"- removed {name} #{oid} {self.fmt_pos(x,y)}", "dim")
+                self.item_types.pop(oid, None)
             except (ValueError, TypeError):
                 pass
 
@@ -153,9 +207,12 @@ class Tracker:
                 "info",
             )
             self.items.clear()
+            self.item_types.clear()
+            self.smiled_ids.clear()
             self.walk_target = None
             self.path.clear()
             self.blacklist.clear()
+            self.picked_ids.clear()  # oid 가 다음 맵에서 재사용될 수 있음
 
     async def on_packet_c2s(self, pkt: dict):
         """클라 → 서버 패킷에서 내 위치 + timestamp 추적."""
@@ -182,7 +239,7 @@ class Tracker:
     async def notify_spawn(
         self, oid: int, name: str, x: int, y: int, batch: bool = False
     ):
-        if not self.matches(name):
+        if not self.should_target(oid, name):
             return
         tag = "초기맵" if batch else "스폰"
         msg = f"★ {tag}: {name} #{oid} {self.fmt_pos(x, y)}"
@@ -196,10 +253,11 @@ class Tracker:
         # 자동 이동: 현재 타겟 없고 playable area 안인 꽃만
         if (
             self.args.auto_walk
-            and oid != self.last_pickup_id
+            and oid not in self.picked_ids
             and self.my_id
             and oid not in self.blacklist
             and self.walk_target is None
+            and not self.is_taken(oid)
         ):
             cmap = self._cmap()
             if cmap and not self.args.no_bounds_filter and not cmap.in_playable(x, y):
@@ -215,7 +273,7 @@ class Tracker:
                     self.path.clear()
                     log(f"→ walk target: {name} #{oid} {self.fmt_pos(x, y)}", "info")
 
-        if self.args.pickup and oid != self.last_pickup_id:
+        if self.args.pickup and oid not in self.picked_ids:
             await self.maybe_pickup(oid, name, x, y, batch)
 
     async def maybe_pickup(self, oid: int, name: str, x: int, y: int, batch: bool):
@@ -223,7 +281,7 @@ class Tracker:
         batch=True 도 허용 (proximity_loop 가 batch 로 호출하는 케이스)."""
         if not self.my_id:
             return
-        if oid == self.last_pickup_id:
+        if oid in self.picked_ids:
             return
         dx, dy = x - self.cur_x, y - self.cur_y
         dist = (dx * dx + dy * dy) ** 0.5
@@ -236,7 +294,7 @@ class Tracker:
         if self.args.stealth and not batch:
             if random.random() < self.args.skip_rate:
                 log(f"[stealth-skip] {name} #{oid}", "dim")
-                self.last_pickup_id = oid
+                self.picked_ids.add(oid)
                 return
             delay = random.uniform(self.args.reaction_min, self.args.reaction_max)
             log(f"[stealth] {delay:.2f}s 반응 지연…", "dim")
@@ -257,11 +315,13 @@ class Tracker:
         cmap = self._cmap()
         best, best_dist = None, float("inf")
         for oid, (name, x, y) in self.items.items():
-            if not self.matches(name):
+            if not self.should_target(oid, name):
                 continue
             if oid in self.blacklist:
                 continue
-            if oid == self.last_pickup_id:
+            if oid in self.picked_ids:
+                continue
+            if self.is_taken(oid):
                 continue
             if cmap and not self.args.no_bounds_filter and not cmap.in_playable(x, y):
                 continue
@@ -382,8 +442,9 @@ class Tracker:
             if self.args.pickup:
                 best = None; best_dist = float("inf")
                 for oid, (name, x, y) in self.items.items():
-                    if not self.matches(name): continue
-                    if oid == self.last_pickup_id: continue
+                    if not self.should_target(oid, name): continue
+                    if oid in self.picked_ids: continue
+                    if self.is_taken(oid): continue
                     dx, dy = x - self.cur_x, y - self.cur_y
                     d = (dx * dx + dy * dy) ** 0.5
                     if d <= self.args.max_dist and d < best_dist:
@@ -402,11 +463,41 @@ class Tracker:
         {"type":"itemGet","no":"<id>","timestamp":"<n>"}"""
         if not self.client_writer:
             return
-        self.last_pickup_id = oid
+        self.picked_ids.add(oid)
+        # self.items 에서도 즉시 제거 — 서버가 remove 패킷 안 보낼 수도 있음.
+        # 만약 itemGet 실패해도 server 의 다음 obj broadcast 에서 다시 잡힘.
+        self.items.pop(oid, None)
         self.move_ts += 1
         pkt = {"type": "itemGet", "no": str(oid), "timestamp": str(self.move_ts)}
         await self._inject(pkt)
         log(f">> itemGet({oid}, {name}) ts={self.move_ts}", "success")
+
+    async def try_smile(self, target_oid: int, target_name: str):
+        """돼지/응가 NPC 위에서 웃는 표정 패킷 발사 (motion=62).
+
+        캡처 검증: motion 62 → 책임의 열쇠/돼지코 등 아이템 드랍 + exp 50.
+        본인 my_id 로 발사하면 server 가 broadcast 해서 모두에게 전달됨.
+
+        발사 후 smile_drop_until 윈도우 활성 — 그 동안은 매칭 안 되는 type=i 도
+        다 줍기 (드랍 종류 다양해서 filter 로 일일이 못 맞춤).
+        """
+        if not self.client_writer or not self.my_id:
+            return
+        if self.args.stealth:
+            await asyncio.sleep(random.uniform(0.4, 1.1))
+        self.smiled_ids.add(target_oid)
+        self.move_ts += 1
+        pkt = {
+            "type": "motion",
+            "no": str(self.my_id),
+            "motion": str(self.args.smile_motion),
+            "sound": "",
+        }
+        await self._inject(pkt)
+        # drop window 활성 — 12초간 모든 type=i 자동 픽업
+        self.smile_drop_until = time.time() + self.args.smile_drop_window
+        log(f">> 표정 motion={self.args.smile_motion} on {target_name} #{target_oid} "
+            f"(drop window {self.args.smile_drop_window}s)", "success")
 
     async def _inject(self, pkt: dict):
         if self.client_writer is None:
@@ -449,6 +540,7 @@ class Tracker:
         last_pos = (0, 0)
         last_pos_at = 0.0
         last_oid = None
+        last_arrived_oid = None  # 따라잡음 로그 dedupe — 같은 타겟 멈춰있는 동안 한 번만
         SIDESTEP_PATTERNS = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)]
 
         while True:
@@ -459,8 +551,18 @@ class Tracker:
 
             if not self.args.auto_walk or not self.walk_target or not self.client_writer:
                 stuck_attempts = 0; sidestep_remaining = 0; last_oid = None
+                last_arrived_oid = None
                 continue
-            oid, name, tx, ty = self.walk_target
+            oid, name, _tx_static, _ty_static = self.walk_target
+
+            # 살아있는 좌표 우선 — NPC/동물 같이 움직이는 타겟 따라가기
+            live = self.items.get(oid)
+            if live is not None:
+                _, tx, ty = live
+            else:
+                self.walk_target = None
+                last_arrived_oid = None
+                continue
 
             if oid != last_oid:
                 stuck_attempts = 0
@@ -468,6 +570,7 @@ class Tracker:
                 last_pos = (self.server_x, self.server_y)
                 last_pos_at = time.time()
                 last_oid = oid
+                last_arrived_oid = None
 
             if time.time() - self.walk_started_at > self.args.walk_timeout:
                 log(f"[walker] 타임아웃 — {name} 잠시 보류", "dim")
@@ -475,19 +578,39 @@ class Tracker:
                 self.walk_target = None
                 self._select_next_target()
                 continue
-            if oid not in self.items:
-                self.walk_target = None
-                continue
 
             dx = tx - self.server_x
             dy = ty - self.server_y
             dist = (dx * dx + dy * dy) ** 0.5
             if dist <= self.args.max_dist:
-                log(f"[walker] 도달 (dist={dist:.0f}) — pickup", "info")
-                self.walk_target = None
-                if self.args.pickup:
+                # 동물 NPC 위에 도착 → 자동 표정 짓기 (auto_smile 옵션)
+                is_animal_target = self.is_animal(name)
+                if (
+                    self.args.auto_smile
+                    and is_animal_target
+                    and oid not in self.smiled_ids
+                    and not self.is_taken(oid)
+                ):
+                    await self.try_smile(oid, name)
+                    # 표정 후 잠시 대기 — 서버가 응답 + 아이템 드랍할 시간
+                    # 아이템이 obj 패킷으로 등록되면 walker 가 자동 재타겟 → pickup
+                    self.walk_target = None
+                    last_arrived_oid = None
+                    self.blacklist[oid] = time.time() + 8.0  # 8초간 같은 NPC 재시도 방지
+                    continue
+                if self.args.pickup and not is_animal_target:
+                    log(f"[walker] 도달 (dist={dist:.0f}) — pickup", "info")
+                    self.walk_target = None
                     await self.maybe_pickup(oid, name, tx, ty, batch=False)
+                    last_arrived_oid = None
+                else:
+                    # follow-mode 또는 동물 (이미 smile 함): 타겟 유지하고 멈춤
+                    if last_arrived_oid != oid:
+                        log(f"[walker] 따라잡음 — {name} #{oid} (follow)", "info")
+                        last_arrived_oid = oid
                 continue
+            else:
+                last_arrived_oid = None
 
             now = time.time()
             if sidestep_remaining == 0 and now - last_pos_at > self.args.stuck_check_secs:

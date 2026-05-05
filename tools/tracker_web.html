@@ -77,32 +77,43 @@
     </div>
     <div class="card">
       <h2>Filter</h2>
-      <div class="row"><label>name</label><input id="i_filter" type="text" placeholder="요정석,씨앗,버섯,열매,꽃"></div>
+      <div class="row"><label>name</label><input id="i_filter" type="text" placeholder="요정석,씨앗,버섯,열매,꽃,인삼,사과,쌀"></div>
       <div class="quick" style="display:flex; gap:4px; flex-wrap:wrap; margin: 2px 0 6px;">
-        <button class="qf" data-fill="요정석,씨앗,버섯,열매,꽃">채집+꽃</button>
-        <button class="qf" data-fill="요정석,씨앗,버섯,열매">채집만</button>
+        <button class="qf" data-fill="요정석,씨앗,버섯,열매,꽃,인삼,사과,쌀">채집+꽃</button>
+        <button class="qf" data-fill="요정석,씨앗,버섯,열매,인삼,사과,쌀">채집만</button>
         <button class="qf" data-fill="꽃">꽃만</button>
-        <button class="qf" data-fill="요정석,씨앗,버섯,열매,꽃,인삼,별,달팽이">전부</button>
+        <button class="qf" data-fill="돼지,응가">동물</button>
+        <button class="qf" data-fill="요정석,씨앗,버섯,열매,꽃,인삼,사과,쌀,별,달팽이,마법의 알,돼지,응가">전부</button>
         <button class="qf" data-fill="">지우기</button>
       </div>
       <div class="row"><label>types</label><input id="i_types" type="text" placeholder="hi,i"></div>
       <details class="help"><summary>ⓘ 알려진 아이템 + 필터 팁</summary>
         <div style="margin-top:4px;">
-          <b style="color:#5fc46e;">채집형 (type=hi)</b> — 진짜 줍는 거<br>
-          <code>땅의요정석</code> <code>씨앗</code> <code>버섯</code> <code>열매</code>
+          <b style="color:#5fc46e;">채집형 (type=hi)</b><br>
+          <code>땅의요정석</code> <code>바람의요정석</code> <code>불의요정석</code><br>
+          <code>씨앗</code> <code>버섯</code> <code>열매</code> <code>인삼</code> <code>사과</code> <code>쌀</code>
         </div>
         <div style="margin-top:4px;">
           <b style="color:#fdcb6e;">꽃 (type=i)</b><br>
-          <code>빨강꽃</code> <code>파랑꽃</code> <code>노랑꽃</code> <code>인삼꽃</code> <code>인삼</code>
+          <code>빨강꽃</code> <code>파랑꽃</code> <code>노랑꽃</code> <code>인삼꽃</code> <code>나리꽃 부케</code>
         </div>
         <div style="margin-top:4px;">
-          <b style="color:#6ea8fe;">희귀/이벤트</b><br>
-          <code>바람의요정석</code> <code>별</code> <code>달팽이</code>
+          <b style="color:#6ea8fe;">이벤트/희귀</b><br>
+          <code>별</code> <code>달팽이</code> <code>마법의 알</code>
+          <span class="ex">(공백 포함!)</span>
+        </div>
+        <div style="margin-top:4px;">
+          <b style="color:#ff7675;">동물 NPC (변신 아이템 드랍)</b><br>
+          <code>돼지</code> <code>응가</code> <span class="ex">— 부분일치로 모든 변종</span><br>
+          <span class="ex">살색 돼지/황금돼지/검은돼지/산타돼지/쵸코응가/골드응가/조로응가/차차응가/바둑응가/범견응가</span><br>
+          → 위에 올라가서 표정 짓기 → 돼지코/응가 아이템 드랍 → 줍기로 변신.<br>
+          ⚠️ 사용자가 부르는 별명(살색돼지/초코응가)이 게임 정식이름과 다를 수 있음 — <code>돼지</code>/<code>응가</code> 단독 키워드 권장.
         </div>
         <div style="margin-top:6px; color:#a8b0bc;">
           💡 부분일치라 짧게 쓰면 됨:<br>
-          &nbsp;&nbsp;<code>꽃</code> → 빨강꽃·파랑꽃·노랑꽃·인삼꽃 다 잡힘<br>
-          &nbsp;&nbsp;<code>요정석</code> → 땅의요정석 + 바람의요정석<br>
+          &nbsp;&nbsp;<code>꽃</code> → 빨강꽃·파랑꽃·노랑꽃·인삼꽃·나리꽃 부케 다 잡힘<br>
+          &nbsp;&nbsp;<code>요정석</code> → 땅·바람·불의요정석 3종 모두<br>
+          ⚠️ <code>마법의 알</code> 은 띄어쓰기 있음. <code>마법의알</code> 로 쓰면 안 잡힘<br>
           ⚠️ <code>i</code> 타입엔 노점 가격(<span class="ex">2,500,000 등</span>), 쓰레기통, 편지함도 섞여있음 — name 필터 꼭 쓰기
         </div>
       </details>

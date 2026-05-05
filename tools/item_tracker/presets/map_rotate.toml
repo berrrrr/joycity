@@ -1,7 +1,7 @@
 # 맵 순환 — 주기적으로 다른 맵 돌면서 채집
 # map-cycle 에 mapId 콤마구분 (예 01006=...)
 
-filter = "요정석,씨앗,버섯,열매,꽃"
+filter = "요정석,씨앗,버섯,열매,꽃,인삼,사과,쌀"
 pickup = true
 auto_walk = true
 stealth = true

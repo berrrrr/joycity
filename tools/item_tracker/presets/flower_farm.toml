@@ -1,7 +1,7 @@
 # 꽃 자동 채집 — auto-walk + pickup + stealth + 웹 UI
 # 가까운 꽃부터 자동으로 걸어가서 줍고, 못 가는 거는 잠시 블랙리스트.
 
-filter = "요정석,씨앗,버섯,열매,꽃"
+filter = "요정석,씨앗,버섯,열매,꽃,인삼,사과,쌀"
 pickup = true
 auto_walk = true
 stealth = true
