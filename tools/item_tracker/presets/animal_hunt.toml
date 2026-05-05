@@ -30,21 +30,34 @@ auto_walk = true
 pickup = true                       # 드랍 아이템 자동 줍기
 auto_smile = true                   # 도착 시 자동 표정 (풀자동의 핵심)
 smile_motion = 62                   # 웃음 (캡처 검증)
+# teleport = true                   # ⚠️ MacroDetector "Teleport:" 플래그 검출
+                                    # 정식 useSkill 패킷 캡처되면 그걸로 대체 예정
 stealth = true                      # 랜덤 지터/반응 지연
 web = true
 beep = true
+
+# 빠른 walking — NPC speed=4 와 동등하게 (장애물 회피 + 이동 추격용)
+step_size = 4
+walk_interval = 0.10
 
 # 정확히 동물 위에 올라가야 표정 효과 — max_dist 작게
 max_dist = 4.0
 max_target_dist = 200.0
 
-# 맵 순환 — 13개 맵 60초 간격
-map_cycle = "00100,00101,00102,00103,00104,00105,00200,02100,02101,02102,02103,02104,02105"
-map_cycle_secs = 60.0
+# === 게임 메커니즘 (사용자 정보) ===
+# 살색돼지 (조이맵 7) + 초코응가 (해피맵 6) = 매시 정각 13마리 spawn.
+# 정각 후 튕겼다가 재접하면 모든 개돼지 소멸 → 재접속 절대 금지.
+# 평소(정각 외) 는 idle — 트래픽 최소화 + 매크로 의심 줄임.
 
-# 도달 못 한 동물은 50초 후 포기
-walk_timeout = 50.0
-blacklist_secs = 60.0
+# 맵 순환 — 정각 burst 모드 (매시 정각에만 활성)
+map_cycle = "00100,00101,00102,00103,00104,00105,00200,02100,02101,02102,02103,02104,02105"
+hourly_burst = true
+hourly_lead = 10.0    # 정각 10초 전에 깨어나서 첫 맵 진입 (서버 오차 보정)
+map_cycle_secs = 25.0 # 맵당 25초 (13맵 × 25초 = 5분 30초 1바퀴 → spawn 직후 모두 캐치)
+
+# 도달 못 한 동물은 20초 후 포기 (25초 cycle 안에 다음 맵으로 넘어가도록)
+walk_timeout = 20.0
+blacklist_secs = 25.0
 
 # 표정 발사 후 같은 NPC 8초간 재시도 안 함 (try_smile 내부 처리)
 # 다른 사람이 먼저 잡은 동물 (type=o) 은 자동으로 타겟 제외됨

@@ -66,6 +66,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--wander-steps-max", type=int, default=12, help="patrol 한 방향 최대 step")
     p.add_argument("--map-cycle", default="", help='맵 순환 — 콤마구분 mapId')
     p.add_argument("--map-cycle-secs", type=float, default=180.0, help="맵 순환 주기 초")
+    p.add_argument("--hourly-burst", action="store_true",
+                   help="정각 burst 모드 — 매시 정각에만 모든 맵 1회전. 평소엔 idle. "
+                        "(살색돼지/초코응가 등 정각 spawn 이벤트용)")
+    p.add_argument("--hourly-lead", type=float, default=10.0,
+                   help="정각 N초 전에 깨어나기 (기본 10초 — 서버 시간 오차 + 첫 맵 진입 여유)")
     p.add_argument("--beep", action="store_true", help="새 spawn 시 시스템 비프음")
     p.add_argument("--stealth", action="store_true", help="사람처럼 보이도록 랜덤 지터/skip/지연")
     p.add_argument("--skip-rate", type=float, default=0.15, help="stealth: 랜덤 skip 확률")
@@ -78,6 +83,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="표정 motion 코드 (기본 62=웃음, 캡처 검증)")
     p.add_argument("--smile-drop-window", type=float, default=12.0,
                    help="표정 발사 후 N초간 모든 type=i 자동 픽업 (drop 종류 다양 — 기본 12s)")
+    p.add_argument("--teleport", action="store_true",
+                   help="순간이동 모드 — A*/step-by-step 우회, 단일 패킷으로 target 좌표 직접 설정. "
+                        "장애물 회피 + 이동 NPC 추격 효과적. 매크로 검출 위험 ⚠️")
     p.add_argument("--webhook", default="", help="Discord webhook URL (옵션)")
     p.add_argument("--no-passthrough", action="store_true", help="80/443 raw passthrough 끔")
     p.add_argument("--log-dir", default="captures", help="raw NDJSON 로그 저장 디렉터리")

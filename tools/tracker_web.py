@@ -39,11 +39,15 @@ def _config_dict(args) -> dict:
         "pickup": bool(args.pickup),
         "auto_walk": bool(args.auto_walk),
         "wander": bool(getattr(args, "wander", False)),
+        "auto_smile": bool(getattr(args, "auto_smile", False)),
+        "hourly_burst": bool(getattr(args, "hourly_burst", False)),
+        "teleport": bool(getattr(args, "teleport", False)),
         "stealth": bool(args.stealth),
         "max_dist": args.max_dist,
         "cooldown": args.cooldown,
         "walk_interval": args.walk_interval,
         "step_size": args.step_size,
+        "smile_motion": getattr(args, "smile_motion", 62),
     }
 
 
@@ -143,19 +147,22 @@ async def _handle(reader, writer):
             if "types" in cfg:
                 t.args.types = cfg["types"] or ""
                 t.types = set(s for s in t.args.types.split(",") if s)
-            for k in ("pickup", "auto_walk", "wander", "stealth"):
+            for k in ("pickup", "auto_walk", "wander", "auto_smile",
+                      "hourly_burst", "teleport", "stealth"):
                 if k in cfg:
                     setattr(t.args, k, bool(cfg[k]))
             for k in ("max_dist", "cooldown", "walk_interval"):
                 if k in cfg and cfg[k] is not None:
                     try: setattr(t.args, k, float(cfg[k]))
                     except (TypeError, ValueError): pass
-            if "step_size" in cfg and cfg["step_size"] is not None:
-                try: t.args.step_size = int(cfg["step_size"])
-                except (TypeError, ValueError): pass
+            for k in ("step_size", "smile_motion"):
+                if k in cfg and cfg[k] is not None:
+                    try: setattr(t.args, k, int(cfg[k]))
+                    except (TypeError, ValueError): pass
             if _LOG_FN:
                 _LOG_FN(f"[config] filter={t.args.filter!r} pickup={t.args.pickup} "
-                        f"walk={t.args.auto_walk} max_dist={t.args.max_dist}", "info")
+                        f"walk={t.args.auto_walk} smile={getattr(t.args,'auto_smile',False)} "
+                        f"hourly={getattr(t.args,'hourly_burst',False)}", "info")
             data = json.dumps(_config_dict(t.args)).encode("utf-8")
             await _write_response(writer, 200, data)
             _broadcast_to_sse(json.dumps({"kind": "config", **_config_dict(t.args)}))

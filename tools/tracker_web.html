@@ -25,8 +25,19 @@
   button.warn { background: #8b3030; }
   button.qf { background: #2a3540; color: #a8b0bc; padding: 2px 8px; font-size: 10.5px; border: 1px solid #2f3540; }
   button.qf:hover { background: #3a4756; color: #fff; }
-  .toggle { display: flex; align-items: center; gap: 4px; margin-right: 8px; }
-  .toggle input { margin: 0; }
+  .toggle { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: #1a1d22; border: 1px solid #2f3540; border-radius: 4px; cursor: pointer; user-select: none; transition: background 0.15s; min-width: 0; flex: 1 1 calc(50% - 4px); }
+  .toggle:hover { background: #20242a; border-color: #3a4250; }
+  .toggle input { margin: 0; flex: 0 0 auto; cursor: pointer; }
+  .toggle span:first-of-type { font-weight: bold; color: #c8d0d8; flex: 0 0 auto; }
+  .toggle .tdesc { color: #6c7280; font-size: 10.5px; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .toggle:has(input:checked) { background: #1e3548; border-color: #2c5282; }
+  .toggle:has(input:checked) span:first-of-type { color: #6ea8fe; }
+  .toggle.highlight:has(input:checked) { background: #2a3a1e; border-color: #4a7a3a; }
+  .toggle.highlight:has(input:checked) span:first-of-type { color: #5fc46e; }
+  .toggle.warn-toggle:has(input:checked) { background: #3a2020; border-color: #8b3030; }
+  .toggle.warn-toggle:has(input:checked) span:first-of-type { color: #ff7675; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+  .section-label { color: #8a94a6; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin: 8px 0 4px; padding-left: 2px; }
   .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; }
   .stats span:nth-child(odd) { color: #8a94a6; }
   .stats span:nth-child(even) { color: #c8d0d8; font-weight: bold; }
@@ -129,16 +140,49 @@
         기본 <code>hi,i</code> = 줍기 가능한 모든 종류. <code>i</code> 만 = 꽃만 추적.
         <br>name 필터와 AND 조건.
       </details>
-      <div class="row" style="margin-top:6px; flex-wrap:wrap;">
-        <label class="toggle"><input id="i_pickup" type="checkbox"> Pickup</label>
-        <label class="toggle"><input id="i_walk" type="checkbox"> Walk</label>
-        <label class="toggle"><input id="i_wander" type="checkbox"> Wander</label>
-        <label class="toggle"><input id="i_stealth" type="checkbox"> Stealth</label>
+      <div class="section-label">자동 동작</div>
+      <div class="toggles">
+        <label class="toggle" title="아이템 도달 시 itemGet 패킷 발사 (자동 줍기)">
+          <input id="i_pickup" type="checkbox"><span>Pickup</span>
+          <span class="tdesc">아이템 자동 줍기</span>
+        </label>
+        <label class="toggle" title="매칭 아이템/NPC 쪽으로 walker 가 자동 이동">
+          <input id="i_walk" type="checkbox"><span>Walk</span>
+          <span class="tdesc">감지된 타겟 자동 따라가기</span>
+        </label>
+        <label class="toggle" title="walker idle 시 학습된 영역 안에서 랜덤 patrol">
+          <input id="i_wander" type="checkbox"><span>Wander</span>
+          <span class="tdesc">idle 일 때 어슬렁</span>
+        </label>
+        <label class="toggle highlight" title="돼지/팝/차차 NPC 도달 시 motion=62 표정 자동 발사">
+          <input id="i_smile" type="checkbox"><span>Auto Smile</span>
+          <span class="tdesc">동물 도달 시 표정→드랍 자동 (캡처 검증)</span>
+        </label>
+        <label class="toggle highlight" title="매시 정각에만 활성 — 13개 맵 1회전 후 다음 정각까지 idle">
+          <input id="i_hourly" type="checkbox"><span>Hourly Burst</span>
+          <span class="tdesc">정각 사냥 모드 (살색돼지/초코응가)</span>
+        </label>
       </div>
-      <div class="row"><label>max-dist</label><input id="i_maxdist" type="number" min="1" step="1"></div>
-      <div class="row"><label>cooldown</label><input id="i_cooldown" type="number" min="0" step="0.1"></div>
-      <div class="row"><label>walk-int</label><input id="i_winterval" type="number" min="0.05" step="0.01"></div>
-      <div class="row"><label>step-size</label><input id="i_step" type="number" min="1" step="1"></div>
+
+      <div class="section-label">안전</div>
+      <div class="toggles">
+        <label class="toggle" title="랜덤 지터/반응 지연/skip 으로 사람처럼 보이게">
+          <input id="i_stealth" type="checkbox"><span>Stealth</span>
+          <span class="tdesc">랜덤 지터 + 매크로 의심 줄임</span>
+        </label>
+        <label class="toggle warn-toggle" title="OX/OY 직접 설정 — MacroDetector Teleport 플래그 검출 위험">
+          <input id="i_teleport" type="checkbox"><span>Teleport</span>
+          <span class="tdesc">⚠️ 순간이동 (검출 위험 높음)</span>
+        </label>
+      </div>
+
+      <div class="section-label">파라미터</div>
+      <div class="row"><label>max-dist</label><input id="i_maxdist" type="number" min="1" step="1" title="이 거리 안에 들어가면 도착 인정"></div>
+      <div class="row"><label>cooldown</label><input id="i_cooldown" type="number" min="0" step="0.1" title="픽업 시도 최소 간격 (초)"></div>
+      <div class="row"><label>walk-int</label><input id="i_winterval" type="number" min="0.05" step="0.01" title="walker step 발사 간격 (초)"></div>
+      <div class="row"><label>step-size</label><input id="i_step" type="number" min="1" step="1" title="한 step 당 좌표 변화량"></div>
+      <div class="row"><label>표정코드</label><input id="i_smilemotion" type="number" min="1" step="1" title="motion 코드 (62=웃음 — 캡처 검증)"></div>
+
       <div class="row" style="margin-top:6px; gap:8px; flex-wrap:wrap;">
         <button id="b_apply">Apply</button>
         <button id="b_clear" class="warn">Clear blacklist</button>
@@ -270,11 +314,15 @@ function loadConfig(c) {
   $('i_pickup').checked = !!c.pickup;
   $('i_walk').checked = !!c.auto_walk;
   $('i_wander').checked = !!c.wander;
+  $('i_smile').checked = !!c.auto_smile;
+  $('i_hourly').checked = !!c.hourly_burst;
+  $('i_teleport').checked = !!c.teleport;
   $('i_stealth').checked = !!c.stealth;
   $('i_maxdist').value = c.max_dist;
   $('i_cooldown').value = c.cooldown;
   $('i_winterval').value = c.walk_interval;
   $('i_step').value = c.step_size;
+  $('i_smilemotion').value = c.smile_motion ?? 62;
 }
 
 document.querySelectorAll('button.qf').forEach(btn => {
@@ -285,17 +333,27 @@ document.querySelectorAll('button.qf').forEach(btn => {
 });
 
 $('b_apply').onclick = async () => {
+  if ($('i_teleport').checked && !confirm(
+    'Teleport 모드는 게임의 MacroDetector 에 검출될 수 있습니다.\n계정 페널티 위험이 있어요. 정말 켤까요?'
+  )) {
+    $('i_teleport').checked = false;
+    return;
+  }
   const body = {
     filter: $('i_filter').value,
     types: $('i_types').value,
     pickup: $('i_pickup').checked,
     auto_walk: $('i_walk').checked,
     wander: $('i_wander').checked,
+    auto_smile: $('i_smile').checked,
+    hourly_burst: $('i_hourly').checked,
+    teleport: $('i_teleport').checked,
     stealth: $('i_stealth').checked,
     max_dist: parseFloat($('i_maxdist').value),
     cooldown: parseFloat($('i_cooldown').value),
     walk_interval: parseFloat($('i_winterval').value),
     step_size: parseInt($('i_step').value),
+    smile_motion: parseInt($('i_smilemotion').value),
   };
   const r = await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   const j = await r.json();

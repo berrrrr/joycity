@@ -156,6 +156,16 @@ class Tracker:
                 # 이미 추적중인 oid 의 type 변환은 항상 받음 (c→o 가 핵심 신호)
                 if oid in self.item_types:
                     self.item_types[oid] = obj_type
+                # 본인 oid 면 server_x/y 직접 동기화 (map 패킷 외 추가 source)
+                if self.my_id and oid == self.my_id:
+                    try:
+                        self.server_x = int(v.get("OX", self.server_x))
+                        self.server_y = int(v.get("OY", self.server_y))
+                        self.my_x = self.server_x
+                        self.my_y = self.server_y
+                    except (ValueError, TypeError):
+                        pass
+                    continue  # 본인은 self.items 에 안 넣음 (target 충돌 방지)
                 if obj_type not in self.types:
                     continue
                 try:
@@ -172,8 +182,9 @@ class Tracker:
                     pass
 
         elif t == "move":
+            no_str = str(pkt.get("no", ""))
             # 본인 캐릭터 이동 echo — 서버가 실제로 받아준 위치
-            if self.my_id and str(pkt.get("no")) == str(self.my_id):
+            if self.my_id and no_str == str(self.my_id):
                 try:
                     new_sx = int(pkt.get("VX", self.server_x))
                     new_sy = int(pkt.get("VY", self.server_y))
@@ -184,6 +195,21 @@ class Tracker:
                         if cmap:
                             cmap.mark_walkable(new_sx, new_sy)
                     self.server_x, self.server_y = new_sx, new_sy
+                except (ValueError, TypeError):
+                    pass
+            else:
+                # NPC / 타플레이어 이동 — 추적중인 oid 면 좌표 갱신
+                # (돼지/팝 같이 움직이는 타겟의 live 좌표 반영 — 안 그러면
+                # walker 가 spawn 시점 좌표만 따라가다 NPC 놓침)
+                try:
+                    other_oid = int(no_str)
+                    prev = self.items.get(other_oid)
+                    if prev is not None:
+                        name, _, _ = prev
+                        new_x = int(pkt.get("VX", pkt.get("TX", 0)))
+                        new_y = int(pkt.get("VY", pkt.get("TY", 0)))
+                        if new_x or new_y:
+                            self.items[other_oid] = (name, new_x, new_y)
                 except (ValueError, TypeError):
                     pass
 
@@ -202,8 +228,19 @@ class Tracker:
             mn = pkt.get("MapNum", "?")
             self.current_map = str(mn)
             cmap = self._cmap()
+            # 맵 패킷에 본인 spawn 좌표 — 매 진입 시 server_x/y 동기화 (move echo 못 받아도)
+            try:
+                spawn_x = int(pkt.get("OX", self.server_x))
+                spawn_y = int(pkt.get("OY", self.server_y))
+                self.server_x = spawn_x
+                self.server_y = spawn_y
+                self.my_x = spawn_x
+                self.my_y = spawn_y
+                self.last_server_pos = (spawn_x, spawn_y)
+            except (ValueError, TypeError):
+                pass
             log(
-                f"맵 진입: {mn} {pkt.get('MapName','')} (학습: walk={len(cmap.walkable)} block={len(cmap.blocked)})",
+                f"맵 진입: {mn} {pkt.get('MapName','')} @({self.server_x},{self.server_y}) (학습: walk={len(cmap.walkable)} block={len(cmap.blocked)})",
                 "info",
             )
             self.items.clear()
@@ -283,6 +320,12 @@ class Tracker:
             return
         if oid in self.picked_ids:
             return
+        # 동물 NPC 는 itemGet 대상 아님 (표정만 발사). 거리 계산 오류 시 안전망.
+        if self.is_animal(name):
+            return
+        # type=c (캐릭터) 도 itemGet 안 보냄 — itemGet 은 type=hi/i 만 유효
+        if self.item_types.get(oid) == "c":
+            return
         dx, dy = x - self.cur_x, y - self.cur_y
         dist = (dx * dx + dy * dy) ** 0.5
         if dist > self.args.max_dist:
@@ -347,35 +390,82 @@ class Tracker:
                 cmap.save_persist()
 
     async def map_cycle_loop(self):
-        """일정 시간마다 맵 순환. --map-cycle "01006,01007" 같이 지정.
-        walker target 추적 중이어도 시간 되면 강제 전환 (현재 타겟 잠시 보류)."""
+        """맵 순환 — 두 가지 모드:
+
+        - 일반 (continuous): 일정 시간마다 다음 맵으로. 무한 반복.
+        - hourly burst (--hourly-burst): 매시 정각 직전 깨어나서 모든 맵을
+          map-cycle-secs 간격으로 1회전. 끝나면 다음 정각까지 idle.
+          (살색돼지/초코응가 등 정각 spawn 이벤트용. 평소엔 트래픽 안 보냄.)
+        """
         if not self.args.map_cycle:
             return
         maps = [m.strip() for m in self.args.map_cycle.split(",") if m.strip()]
         if len(maps) < 2:
             log(f"[map-cycle] 2개 이상 맵 필요 (지금: {maps})", "warn")
             return
+
+        if self.args.hourly_burst:
+            await self._hourly_burst_loop(maps)
+        else:
+            await self._continuous_cycle_loop(maps)
+
+    async def _continuous_cycle_loop(self, maps: list[str]):
+        log(f"[map-cycle] 연속 순환: {maps}, 주기 {self.args.map_cycle_secs}초", "info")
         idx = 0
-        log(f"[map-cycle] 순환 활성: {maps}, 주기 {self.args.map_cycle_secs}초", "info")
         while True:
             await asyncio.sleep(self.args.map_cycle_secs)
             if not self.client_writer or not self.my_id:
                 continue
-            if self.walk_target is not None:
-                tgt_oid = self.walk_target[0]
-                self.blacklist[tgt_oid] = time.time() + self.args.blacklist_secs
-                self.walk_target = None
-                self.path.clear()
-                log(f"[map-cycle] 현재 타겟 #{tgt_oid} 보류, 맵 전환", "info")
-            target_map = maps[idx % len(maps)]
-            if target_map == self.current_map:
-                idx += 1
-                target_map = maps[idx % len(maps)]
-            self.move_ts += 1
-            pkt = {"type": "map", "mapId": target_map, "timestamp": str(self.move_ts)}
-            await self._inject(pkt)
-            log(f"[map-cycle] → {target_map}", "info")
+            await self._cycle_to_next(maps, idx)
             idx += 1
+
+    async def _hourly_burst_loop(self, maps: list[str]):
+        """매시 정각 직전에 깨어나서 모든 맵 1회전. 정각 spawn 이벤트 캐치."""
+        import datetime
+        log(f"[map-cycle:hourly] 정각 burst 모드 — {len(maps)}개 맵, "
+            f"맵당 {self.args.map_cycle_secs}초", "info")
+        while True:
+            now = datetime.datetime.now()
+            # 다음 정각 계산
+            next_hour = (now + datetime.timedelta(hours=1)).replace(
+                minute=0, second=0, microsecond=0
+            )
+            # 정각 N초 전에 깨어나기 (서버 시간 오차 + 첫 맵 진입 미리)
+            lead_secs = self.args.hourly_lead
+            wake_at = next_hour - datetime.timedelta(seconds=lead_secs)
+            sleep_secs = (wake_at - now).total_seconds()
+            if sleep_secs > 0:
+                log(f"[map-cycle:hourly] 다음 burst: {wake_at.strftime('%H:%M:%S')} "
+                    f"({sleep_secs:.0f}초 후)", "info")
+                await asyncio.sleep(sleep_secs)
+
+            log(f"[map-cycle:hourly] ★ 정각 burst 시작 ({datetime.datetime.now().strftime('%H:%M:%S')})", "warn")
+            for idx, target_map in enumerate(maps):
+                if not self.client_writer or not self.my_id:
+                    log(f"[map-cycle:hourly] 연결 끊김 — burst 중단", "err")
+                    break
+                await self._cycle_to_next(maps, idx)
+                # 마지막 맵 후엔 sleep 안 함 (다음 정각까지 대기 시작)
+                if idx < len(maps) - 1:
+                    await asyncio.sleep(self.args.map_cycle_secs)
+            log(f"[map-cycle:hourly] burst 완료 — 다음 정각까지 대기", "info")
+
+    async def _cycle_to_next(self, maps: list[str], idx: int):
+        """현재 walker 타겟 보류 + 다음 맵으로 packet 발사."""
+        if self.walk_target is not None:
+            tgt_oid = self.walk_target[0]
+            self.blacklist[tgt_oid] = time.time() + self.args.blacklist_secs
+            self.walk_target = None
+            self.path.clear()
+            log(f"[map-cycle] 현재 타겟 #{tgt_oid} 보류, 맵 전환", "info")
+        target_map = maps[idx % len(maps)]
+        if target_map == self.current_map:
+            idx += 1
+            target_map = maps[idx % len(maps)]
+        self.move_ts += 1
+        pkt = {"type": "map", "mapId": target_map, "timestamp": str(self.move_ts)}
+        await self._inject(pkt)
+        log(f"[map-cycle] → {target_map}", "info")
 
     async def wander_loop(self):
         """walker idle 일 때 랜덤 patrol — 학습된 영역 안에서 어슬렁."""
@@ -471,6 +561,31 @@ class Tracker:
         pkt = {"type": "itemGet", "no": str(oid), "timestamp": str(self.move_ts)}
         await self._inject(pkt)
         log(f">> itemGet({oid}, {name}) ts={self.move_ts}", "success")
+
+    async def try_teleport(self, tx: int, ty: int):
+        """단일 move 패킷으로 순간이동 — OX/OY 를 직접 target 으로 설정.
+
+        서버 안티치트가 거부하면 다음 move broadcast 에 server_x/y 가 원래대로
+        snap-back 됨. 검출 위험 — 매크로 의심받을 수 있음 ⚠️
+        """
+        if not self.client_writer or not self.my_id:
+            return
+        self.move_ts += 1
+        pkt = {
+            "type": "move",
+            "TX": str(tx), "TY": str(ty),
+            "OX": str(tx), "OY": str(ty),
+            "timestamp": str(self.move_ts),
+        }
+        await self._inject(pkt)
+        # 우리 추적 좌표도 즉시 갱신 (다음 walker iteration 의 dist 계산용)
+        self.server_x, self.server_y = tx, ty
+        self.my_x, self.my_y = tx, ty
+        # 학습된 walkable 에 추가 (teleport 성공시 그 셀이 갈 수 있는 곳임)
+        cmap = self._cmap()
+        if cmap:
+            cmap.mark_walkable(tx, ty)
+        log(f">> 순간이동 → ({tx},{ty})", "warn")
 
     async def try_smile(self, target_oid: int, target_name: str):
         """돼지/응가 NPC 위에서 웃는 표정 패킷 발사 (motion=62).
@@ -611,6 +726,12 @@ class Tracker:
                 continue
             else:
                 last_arrived_oid = None
+
+            # 순간이동 모드 — A* / sidestep / step-by-step 모두 우회.
+            # 매크로 검출 위험 ⚠️ 서버 거부 시 snap-back 됨.
+            if self.args.teleport:
+                await self.try_teleport(tx, ty)
+                continue
 
             now = time.time()
             if sidestep_remaining == 0 and now - last_pos_at > self.args.stuck_check_secs:
